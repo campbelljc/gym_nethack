@@ -125,9 +125,13 @@ The framework is also mentioned in small part in my thesis, which you can access
 ## TODO
 
 [ ] Check if records are being saved properly in level environment.
+
 [ ] Add the occupancy map algorithm for detecting secret areas as described in paper (have to refactor it).
+
 [ ] Update keras-rl branch to current version.
+
 [ ] Add policy name to save directory name.
+
 [ ] Document how to run multiple NH processes in parallel.
 
 ## Changes to NetHack
