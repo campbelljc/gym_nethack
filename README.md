@@ -5,7 +5,7 @@ OpenAI Gym-like environment for NetHack.
 Current environments:
 
 * basic combat, where you can specify a monster and various player attributes (inventory, experience level, strength, etc.), and the player and monster will face off in a small rectangular room.
-* exploration of a level absent any items, monsters, locked doors, boulders.
+* exploration of a randomly-generated NetHack map absent any items, monsters, locked doors, boulders.
 * simplified combined combat/exploration ("level") environment with monsters and items present.
 
 Note: This is not a typical OpenAI Gym environment. It is more like an OpenAI gym plus a wrapper that deals with setting up the learning model and policy. Environment, model and policy parameters are all located in the configs.py file.
@@ -92,6 +92,8 @@ This information is mostly in the documentation but I have reproduced it here wi
 
 **OccupancyMapPolicy**: Occupancy map exploration algorithm for NetHack. Described in the paper "Exploration with Secret Discovery", J. Campbell & C. Verbrugge, IEEE Transactions on Games, 2018.
 
+**SecretOccupancyMapPolicy**: Occupancy map exploration algorithm for NetHack with support for searching for secret doors and corridors. Described in the paper "Exploration with Secret Discovery", J. Campbell & C. Verbrugge, IEEE Transactions on Games, 2018.
+
 ### Level environment
 
 **Description**: An extension of the exploration environment, where monsters spawn randomly, and going down the stairs will enter the next level. The environment can detect when a monster is present, and switch to using combat reward/state until the monster is no longer visible, at which point will revert to exploration.
@@ -124,15 +126,15 @@ The framework is also mentioned in small part in my thesis, which you can access
 
 ## TODO
 
-[ ] Check if records are being saved properly in level environment.
+- [ ] Check if records are being saved properly in level environment.
 
-[ ] Add the occupancy map algorithm for detecting secret areas as described in paper (have to refactor it).
+- [ ] Update keras-rl branch to current version.
 
-[ ] Update keras-rl branch to current version.
+- [ ] Add policy name to save directory name.
 
-[ ] Add policy name to save directory name.
+- [ ] Document how to run multiple NH processes in parallel.
 
-[ ] Document how to run multiple NH processes in parallel.
+- [ ] Specify learning agent class in config file.
 
 ## Changes to NetHack
 

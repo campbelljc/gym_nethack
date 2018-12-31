@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from gym_nethack.nhdata import *
 from gym_nethack.nhutil import Passage
 from gym_nethack.policies.core import ParameterizedPolicy
-from gym_nethack.misc import verboseprint, dfs, is_straight_line_adjacent, get_maximal_rectangle, distance_pt
+from gym_nethack.misc import verboseprint, dfs, is_straight_line_adjacent, get_maximal_rectangle, get_maximal_square, distance_pt
 
 class MapExplorationPolicy(ParameterizedPolicy):
     """Template map exploration policy."""
@@ -785,7 +785,7 @@ class OccupancyMapPolicy(GreedyExplorationPolicy):
     
     name = 'occmap'
     
-    def __init__(self):
+    def __init__(self, **args):
         """Initialize policy."""
         
         self.GRIDWIDTH, self.GRIDHEIGHT = ROWNO, COLNO
@@ -806,15 +806,14 @@ class OccupancyMapPolicy(GreedyExplorationPolicy):
         self.grid_neighbors_with_diag = [[get_neighbors(x, y, diag=True) for y in range(self.GRIDHEIGHT)] for x in range(self.GRIDWIDTH)]
         self.grid_neighbors = [[get_neighbors(x, y) for y in range(self.GRIDHEIGHT)] for x in range(self.GRIDWIDTH)]
         
-        super().__init__()
+        super().__init__(**args)
     
-    def set_config(self, **args):
+    def set_config(self, param_abbrvs=['df', 'ef', 'bm', 'mr', 'dmn', 'ptm', 'ptmd', 'ptv', 'fr'], **args):
         """Set config."""
-        param_abbrvs = ['df', 'ef', 'bm', 'mr', 'dmn', 'ptm', 'ptmd', 'ptv', 'fr']
         super().set_config(param_abbrvs=param_abbrvs, **args)
     
     def get_default_params(self):
-        """Set the default params for the algorithm, which will be used if not using grid search."""
+        """Get the default params for the algorithm, which will be used if not using grid search."""
         return [
             0.65,   # DIFFUSION_FACTOR
             1,      # EVAL_FACTOR
@@ -969,7 +968,7 @@ class OccupancyMapPolicy(GreedyExplorationPolicy):
         
         for wys, wxs, color, selected in swalls:
             plt.plot(wys, wxs, 's', color=color, markersize=5)
-            print(list(zip(wxs, wys)))
+            verboseprint(list(zip(wxs, wys)))
         
         # plot player position
         px, py = self.env.nh.cur_pos
@@ -1531,4 +1530,387 @@ class OccupancyMapPolicy(GreedyExplorationPolicy):
         
         if self.updated_frontiers:
             self.update_needed = True
+
+class SecretOccupancyMapPolicy(OccupancyMapPolicy):
+    """Occupancy map exploration algorithm for NetHack with support for secret door/corridor detection.
+    Described in the paper "Exploration with Secret Discovery", J. Campbell & C. Verbrugge, IEEE Transactions on Games, 2018."""
     
+    name = 'secoccmap'
+    
+    def __init__(self):
+        """Initialize policy."""
+        super().__init__(need_full_map=True)
+        
+    def set_config(self, **args):
+        """Set config."""
+        param_abbrvs = ['df', 'ef', 'bm', 'mr', 'dmn', 'ptm', 'ptmd', 'ptv', 'fr', 'efw', 'mspw', 'mwdc', 'nspw', 'mrss']
+        super().set_config(param_abbrvs=param_abbrvs, **args)
+    
+    def get_default_params(self):
+        """Get the default params for the algorithm, which will be used if not using grid search."""
+        return [
+            0.25,   # DIFFUSION_FACTOR
+            1,      # EVAL_FACTOR
+            0.3,    # BORDER_MULTIPLIER
+            5,      # MINIMUM_ROOM_SIZE             # at least 3x3 square + 1 wall per side + 1 buffer per side
+            5,      # DFS_MIN_NEIGHBORS
+            0.35,   # PROB_THRESHOLD_MULTIPLIER     # the higher the threshold, the less frontiers will be visited
+            0.45,   # PROB_THRESHOLD_MULTIPLIER_DFS
+            False,  # PROB_THRESHOLD_VARIES
+            1,      # FRONTIER_RADIUS
+            1,      # EVAL_FACTOR_WALL
+            10,     # MAX_SEARCHES_PER_WALL
+            10,     # MAX_WALL_DIST_TO_CELL
+            10,     # NUM_SEARCHES_PER_WALL
+            9       # MINIMUM_SECRET_ROOM_SIZE
+        ]
+    
+    def set_params(self, params):
+        """Set the current parameters for the policy.
+        
+        Args:
+            params: policy parameters"""
+        
+        super().set_params(params)
+        self.EVAL_FACTOR_WALL = params[9]
+        self.MAX_SEARCHES_PER_WALL = params[10]
+        self.MAX_WALL_DIST_TO_CELL = params[11]
+        self.NUM_SEARCHES_PER_WALL = params[12]
+        self.MINIMUM_SECRET_ROOM_SIZE = params[13]
+    
+    def reset(self):
+        """Prepare for a new episode."""
+        
+        self.room_walls = []
+        self.dead_end_walls = []
+        self.walls = []
+        self.wall_counts = []
+        self.target_is_wall = False
+        self.searching_action_count = 0
+        self.searches_at_cur_wall = 0
+        self.component_search_targets = dict()
+        
+        self.visited_room_pos = set()
+        self.secret_grid = np.array([[0 for j in range(COLNO)] for i in range(ROWNO)]) # 1 -> secret
+        
+        return super().reset()
+    
+    def end_episode(self):
+        """Compute information about how many secret doors/corridors/rooms were discovered and how many were not, in the map for the current episode."""
+        super().end_episode()
+        
+        total_num_rooms = self.env.total_num_rooms # this is taken from the NH bottom line (R: %d)
+    
+        non_secret_map_positions = dfs(start=self.env.nh.initial_player_pos,
+                                        passable_func=lambda x, y: self.secret_grid[x][y] == 0 and self.env.nh.basemap_char(x, y) in PASSABLE_CHARS,
+                                        neighbor_func=lambda x, y, diag: self.env.nh.get_neighboring_positions(x, y, diag),
+                                        min_neighbors=0, diag=True)
+    
+        total_nonsecret_rooms = 0
+        num_discovered_secret_rooms = 0
+
+        for room in self.visited_room_pos:
+            if room in non_secret_map_positions:
+                verboseprint("Room",room,"in non secret map positions")
+                total_nonsecret_rooms += 1
+            else:
+                verboseprint("Room",room,"NOT in non secret map positions")
+                num_discovered_secret_rooms += 1
+        assert len(self.env.explored_rooms) == len(self.visited_room_pos)
+    
+        total_secret_rooms = total_num_rooms - total_nonsecret_rooms
+        percent_secret_discovered = (num_discovered_secret_rooms / total_secret_rooms) if total_secret_rooms > 0 else 1
+    
+        num_discovered_sdoors_scorrs = 0
+        for i in range(ROWNO):
+            for j in range(COLNO):
+                if self.secret_grid[i][j] == 1:
+                    num_discovered_sdoors_scorrs += 1
+        percent_secret_sdoors_scorrs_explored = (num_discovered_sdoors_scorrs/self.env.total_sdoors_scorrs) if self.env.total_sdoors_scorrs > 0 else 1
+    
+        verboseprint("Num secret rooms discovered:", num_discovered_secret_rooms, "and total:", total_secret_rooms)
+        verboseprint("Num secret spots discovered:", num_discovered_sdoors_scorrs, "and total:", self.env.total_sdoors_scorrs)
+        
+        self.env.num_discovered_secret_rooms = num_discovered_secret_rooms
+        self.env.total_secret_rooms = total_secret_rooms
+        self.env.num_discovered_sdoors_scorrs = num_discovered_sdoors_scorrs
+    
+    def done_exploring(self):
+        """Returns a boolean indicating whether to stop exploring the current map (i.e., end the episode)."""        
+        
+        if (self.NEED_FULL_MAP and len(self.component_search_targets) > 0) or (not self.NEED_FULL_MAP and any(frozenset(component) in self.component_search_targets and len(self.component_search_targets[frozenset(component)]) > 0 for component in self.connected_components)):
+        #if len(self.component_search_targets) > 0:
+            return False # still targets to search!
+        return super().done_exploring()
+    
+    def process_and_check_target(self, target):
+        """Check if the given target is valid.
+        
+        Args:
+            target: position we currently want to visit"""
+        
+        if target not in self.frontier_list: # moving to a wall...
+            self.target_is_wall = True
+            verboseprint("Chose a wall target (need to search when there): ", target)
+            if self.target == self.env.nh.cur_pos:
+                return False # restart target choosing
+        
+        return super().process_and_check_target(target)
+    
+    def need_new_target(self):
+        """Check if we need a new target."""
+        return True if super().need_new_target() or (self.target in self.env.nh.explored and not self.target_is_wall) else False
+    
+    def get_best_target(self, targets, consider_all=False):
+        """Find the closest position in the targets list to the player.
+        
+        Args:
+            targets: positions to consider (i.e., frontiers)
+            consider_all: whether to consider all frontiers, or just ones that have passed the utility check (good_position())
+        """
+        self.component_search_targets = dict()
+        return super().get_best_target(targets, consider_all)
+    
+    def get_frontier_near_component(self, component, frontiers, frontier_dists_to_player):
+        """Get the frontier closest to both the given component and to the player.
+        
+        Args:
+            component: list of positions (tuples)
+            frontiers: list of frontiers to evaluate
+            frontier_dists_to_player: distance to player for each frontier"""
+        
+        fr = super().get_frontier_near_component(component, frontiers, frontier_dists_to_player)
+        
+        if self.finished_exploring or any(cr in component for cr in self.new_criticals):
+            verboseprint("Not considering secret components this time for comp", len(component))
+            return fr # don't consider secret components when we're just trying to fill out the rest of the non-secret map
+        
+        # find potential search targets
+        search_targets = self.get_walls_near_component(component, disjoint=fr is None)
+        self.component_search_targets[frozenset(component)] = search_targets
+        if len(search_targets) == 0:
+            return fr
+        
+        wall, dist_wall = self.get_best_wall(search_targets)
+        assert wall is not None
+        
+        if fr is None:
+            # disjoint component, so focus on search targets
+            return wall, dist_wall
+
+        frontier, dist_frontier = fr
+        return (frontier, dist_frontier) if dist_frontier <= dist_wall else (wall, dist_wall)
+    
+    def get_walls_near_component(self, component, disjoint):
+        """Return a list of dead-end walls adjacent to the given component, and if the component is disjoint (no adjacent frontiers), then also include adjacent room walls. Walls must satisfy the following criteria to be included: within a certain distance, below a certain search count, enough empty space behind it, within 10 spaces of the nearest component cell, and straight-line adjacent to the nearest component cell.
+        
+        Args:
+            component: the component (list of cells) to find walls adjacent to
+            disjoint: if the component has adjacent frontiers or not
+        """
+        (_, _), size = get_maximal_square(self.GRIDWIDTH, self.GRIDHEIGHT, component)
+        if size < self.MINIMUM_SECRET_ROOM_SIZE:
+            return []
+        
+        # consider all walls that we've discovered so far
+        room_walls = []
+        if disjoint:
+            for walls in self.room_walls:
+                room_walls.extend(walls)
+        room_walls.extend(self.dead_end_walls)
+        room_walls = list(set([pos for pos in room_walls if self.env.nh.basemap_char(*pos) in WALL_CHARS]))
+        assert all(isinstance(wall, tuple) for wall in room_walls)
+        verboseprint("Walls considered for comp", len(component), ": ", room_walls)
+        
+        for wall in room_walls:
+            if wall not in self.walls:
+                self.walls.append(wall)
+                self.wall_counts.append(0)
+                
+        closest_walls = []
+        for frontier in room_walls:
+            dist_frontier_cell, closest_cell = self.get_dist_to_component(component, frontier)
+            
+            if dist_frontier_cell > self.MAX_WALL_DIST_TO_CELL:
+                #verboseprint("Wall", frontier, "too far away (", dist_frontier_cell, ")")
+                continue
+            
+            if self.wall_counts[self.walls.index(frontier)] > self.MAX_SEARCHES_PER_WALL:
+                #verboseprint("Wall", frontier, "searched too much (", self.wall_counts[self.walls.index(frontier)], ")")
+                continue
+            
+            neighbors = self.env.nh.get_neighboring_positions(*frontier)
+            reject = False
+            for nx, ny in neighbors:
+                if self.env.nh.basemap_char(nx, ny) == ' ':
+                    adjacent = self.env.nh.get_chars_adjacent_to(nx, ny)
+                    if adjacent.count(' ') < 3:
+                        reject = True
+                        break
+            if reject:
+                #verboseprint("Wall", frontier, "has too much around it: ", adjacent)
+                continue
+            
+            path = self.env.pathfind_through_unexplored_to(closest_cell, initial=frontier)
+            
+            if path is None or len(path) > 10:
+                #verboseprint("Wall", frontier, "no path to closest cell", closest_cell)
+                continue
+            
+            if not is_straight_line_adjacent(frontier, path, delta=1):
+                #verboseprint("Wall", frontier, "not straight line adjacent to ", closest_cell, "path:", path)
+                continue
+            verboseprint("Wall", frontier, "dist:",dist_frontier_cell)
+            closest_walls.append((frontier, dist_frontier_cell))
+        
+        verboseprint("Walls adjacent to ", len(component), ": ", closest_walls, "(disjoint:", disjoint, ")")
+        return closest_walls # wall_dists
+    
+    def get_best_wall(self, search_targets):
+        """Evaluate the given list of walls and return the one that best satisfies the distance and search count criteria.
+        
+        Args:
+            search_targets: list of walls to evaluate
+        """
+        dists = []
+        counts = []
+        for wall, dist_frontier_cell in search_targets:
+            dist_player_frontier = self.get_distance_to_player(wall)
+            dists.append(dist_player_frontier) # + dist_frontier_cell)
+            counts.append(self.wall_counts[self.walls.index(wall)])
+
+        total_dists = sum([dist for wall, dist in search_targets]) + 1
+        total_counts = sum(counts) + 1        
+        
+        eval_vals = []
+        for i, (wall, dist_frontier_cell) in enumerate(search_targets):
+            norm_dist = dists[i] / sum(dists)
+            norm_count = (counts[i]+1)/total_counts
+            
+            assert counts[i] <= self.MAX_SEARCHES_PER_WALL
+            
+            eval_val = (self.EVAL_FACTOR_WALL * norm_dist) + ((1-self.EVAL_FACTOR_WALL) * norm_count)
+        
+            verboseprint("Wall", wall, "Norm dist:", self.EVAL_FACTOR_WALL*norm_dist,"(",norm_dist,"), norm count:", (1-self.EVAL_FACTOR_WALL)*norm_count,"(",counts[i],"), EV:",eval_val)
+            eval_vals.append(eval_val)
+        
+        #verboseprint("Eval vals for walls near secret cell: ", eval_vals)
+        best_eval_val = min(eval_vals)
+        best_wall_index = eval_vals.index(best_eval_val)
+        best_wall = search_targets[best_wall_index][0]
+        verboseprint("Best wall:", best_wall)
+        
+        # now get room pos next to it.
+        neighboring_positions = self.env.nh.get_neighboring_positions(*best_wall)
+        traversable_neighbors = [neighbor for neighbor in neighboring_positions if self.env.nh.basemap_char(*neighbor) in PASSABLE_CHARS]
+        verboseprint("Traversable neighbors of wall: ", traversable_neighbors, [self.env.nh.basemap_char(x, y) for x, y in traversable_neighbors])
+        
+        # get traversable neighbor that touches highest amount of walls
+        pure_search_targets = [w for w, d in search_targets]
+        neighboring_wall_counts = []
+        for tn in traversable_neighbors:
+            neighbors = self.env.nh.get_neighboring_positions(*tn)
+            neighboring_wall_counts.append(sum([1 for neighbor in neighbors if neighbor in pure_search_targets]))
+        
+        wall, dist_wall = traversable_neighbors[neighboring_wall_counts.index(max(neighboring_wall_counts))], dists[best_wall_index]
+        return wall, dist_wall
+    
+    def no_more_targets(self, targets):
+        """Check if there are any more targets left. Since this algorithm looks beyond the frontier list, we always return False since the targets (frontier) list may be empty but some walls may still need to be searched.
+        
+        Args:
+            list of frontiers"""
+        return False
+    
+    def select_action(self, q_values, valid_action_indices):
+        """Determine where to move next -- first checking if we need to search a wall, then passing it back to the default action selection algorithm."""
+        if self.target_is_wall and self.target == self.env.nh.cur_pos:
+            verboseprint("*** SEARCHING (we reached target room-space adjacent to wall to be searched)")
+            self.searching_action_count += 1
+            
+            for nx, ny in self.env.nh.get_neighboring_positions(*self.env.nh.cur_pos, diag=True):
+                if (self.env.nh.basemap_char(nx, ny) in WALL_CHARS and (nx, ny) in self.walls) or (self.env.nh.basemap_char(nx, ny) == ' ' and (nx, ny) in self.dead_end_walls):
+                    self.wall_counts[self.walls.index((nx, ny))] += 1
+                    verboseprint("      ****** Increasing count of", nx, ny, "(tile:",self.env.nh.basemap_char(nx, ny),") (count:",self.wall_counts[self.walls.index((nx, ny))],")")
+            
+            self.searches_at_cur_wall += 1
+            if self.searches_at_cur_wall >= self.NUM_SEARCHES_PER_WALL:
+                self.target = None
+                self.target_is_wall = False
+                self.target_known = False
+                self.searches_at_cur_wall = 0
+                self.update_needed = True
+                #self.normalize_and_diffuse(0)
+            return CMD.SEARCH
+        
+        return super().select_action(q_values, valid_action_indices)
+
+    def observe_action(self):
+        """Parse NetHack map."""
+        
+        if self.env.stop_recording:
+            super().observe_action()
+            return
+        
+        changed_walls = []
+        if self.env.nh.in_room():
+            r_i = self.env.nh.get_room()
+            room_positions = self.env.nh.rooms[r_i].positions
+            if self.env.nh.prev_map is not None:
+                changed_walls = self.env.nh.get_uncovered_doors()
+            if any(room_pos not in self.visited_nodes for room_pos in room_positions):
+                self.room_walls.append(self.env.nh.rooms[r_i].wall_positions)
+                self.visited_room_pos.add(self.env.nh.rooms[r_i].top_left_corner)
+        elif self.env.nh.in_corridor() or self.env.nh.at_room_opening():
+            if self.env.nh.next_to_dead_end():
+                verboseprint("At dead end!")
+                #input("")
+                neighbors = self.env.nh.get_neighboring_positions(*self.env.nh.cur_pos)
+                for x, y in neighbors:
+                    if self.env.nh.basemap_char(x, y) == ' ' and (x, y) not in self.dead_end_walls:
+                        self.dead_end_walls.append((x, y))
+                        verboseprint("Adding dead end wall",x,y)
+            if self.env.nh.cur_pos in self.visited_nodes and self.env.nh.prev_map is not None:
+                changed_walls = self.env.nh.get_uncovered_doors()
+                verboseprint("In corridor/room opening, been here before and", len(changed_walls), "changed walls detected!")
+        
+        new_doors = []
+        for exit in changed_walls:
+            x, y = exit
+            # check that the exit is adjacent to a visited node...
+            changed_wall_neighbors = self.env.nh.get_neighboring_positions(x, y, diag=True)
+            if not any(neighbor == self.env.nh.cur_pos for neighbor in changed_wall_neighbors):
+                verboseprint("The exit",exit,"is not next to our visited nodes")
+                continue
+            if self.env.nh.basemap_char(x, y) in DOOR_CHARS:
+                verboseprint("******",exit, self.env.nh.basemap_char(x, y))
+                self.secret_grid[x][y] = 1
+                self.add_to_frontier_list(exit) # we found a new passage (or new exit)
+                new_doors.append((x, y))
+        
+        if len(new_doors) > 0:
+            verboseprint("****Found a new door")
+            
+            p_culled = 0
+            for rx, ry in new_doors:
+                p_culled += (self.grid_probs[rx][ry] - self.SINGLE_PROB)                
+                self.grid_probs[rx][ry] = self.SINGLE_PROB            
+                if (rx, ry) in self.visited_nodes:
+                    self.visited_nodes.remove((rx, ry)) # remove this cell since it's now a door.
+                if (rx, ry) in self.room_walls:
+                    self.room_walls.remove((rx, ry))
+                if (rx, ry) in self.dead_end_walls:
+                    self.dead_end_walls.remove((rx, ry))
+                    for neighbor in self.env.nh.get_neighboring_positions(rx, ry, diag=True):
+                        if neighbor in self.dead_end_walls:
+                            self.dead_end_walls.remove(neighbor)
+            
+            self.target = None
+            self.normalize_and_diffuse(p_culled)
+            self.update_needed = True
+            self.grid_needs_updating = True
+            self.env.pathfind_distances = {}
+            self.pathfind2_distances = {}
+        
+        super().observe_action()
+

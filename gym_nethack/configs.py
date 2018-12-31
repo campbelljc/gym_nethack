@@ -195,6 +195,26 @@ exploration_configs = [
         'grid_search':            False,
         'top_models':             False,
         #'num_episodes_per_combo': 1
+    }),
+    ({ # 3
+        # env parameters
+        'env_name':               'NetHackExplEnv-v0',
+        'num_episodes':           5,
+        'save_maps':              False,
+        'parse_items':            False,
+        'secret_rooms':           True,
+        'dataset':                'fixed'
+    }, { # model parameters
+        'test_policy':            SecretOccupancyMapPolicy,
+        'skip_training':          True,
+        'learning_agent':         False
+    }, { # policy parameters
+        'compute_optimal_path':   False,
+        'get_food':               False,
+        'show_graph':             True,
+        'grid_search':            False,
+        'top_models':             False,
+        #'num_episodes_per_combo': 1
     })
 ]
 
@@ -235,5 +255,5 @@ level_configs = [
 ]
 
 #configs = combat_thesis_configs
-#configs = exploration_configs
-configs = level_configs
+configs = exploration_configs
+#configs = level_configs

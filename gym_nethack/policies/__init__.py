@@ -1,4 +1,4 @@
 from gym_nethack.policies.combat import ApproachAttackPolicy, ApproachAttackItemPolicy, FireAntPolicy
 from gym_nethack.policies.rl import LinearAnnealedPolicy, EpsGreedyPossibleQPolicy, BoltzmannPossibleQPolicy
-from gym_nethack.policies.exploration import GreedyExplorationPolicy, SecretGreedyExplorationPolicy, OccupancyMapPolicy
+from gym_nethack.policies.exploration import GreedyExplorationPolicy, SecretGreedyExplorationPolicy, OccupancyMapPolicy, SecretOccupancyMapPolicy
 from gym_nethack.policies.level import LevelPolicy

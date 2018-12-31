@@ -81,6 +81,42 @@ def get_maximal_rectangle(map_width, map_height, rect_points):
     #input("?")
     return best_ll, best_ur, best_area, positions
 
+def get_maximal_square(map_width, map_height, rect_points):
+    # src: http://tech-queries.blogspot.ca/2011/09/maximum-size-square-sub-matrix-with-all.html
+    
+    matrix = [[1 if (i, j) in rect_points else 0 for j in range(map_height)] for i in range(map_width)]
+    
+    i, j = -1, -1
+    s_mat = [[0 for j in range(map_height)] for i in range(map_width)]
+    
+    for i in range(map_width):
+        s_mat[i][0] = matrix[i][0]
+    for j in range(map_height):
+        s_mat[0][j] = matrix[0][j]
+            
+    for i in range(1, map_width):
+        for j in range(1, map_height):
+            if matrix[i][j] == 1:
+                s_mat[i][j] = min(s_mat[i][j-1], s_mat[i-1][j], s_mat[i-1][j-1]) + 1
+            else:
+                s_mat[i][j] = 0
+ 
+    size = s_mat[0][0]
+    max_i, max_j = 0, 0
+    for i in range(map_width):
+        for j in range(map_height):
+            if size < s_mat[i][j]:
+                size = s_mat[i][j]
+                max_i = i
+                max_j = j
+    
+    #positions = set()
+    #for x in range(max_i-size+1, max_i+1):
+    #    for y in range(max_j-size+1, max_j+1):
+    #        positions.add((x, y))
+
+    return (max_i, max_j), size #, positions
+
 def is_straight_line_adjacent(initial, path, delta=2):
     max_dx, max_dy = 0, 0
     for pos in path:
