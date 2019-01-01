@@ -73,10 +73,10 @@ def get_agent(model, env, config, policy_config=None):
     Args:
         config['learning_agent']: If False, then use a TestAgent with heuristic (not learned) policy given by config['test_policy']. Else, use deep Q-learning agent.
         config['policy']: Keras annealing policy class, e.g., LinearAnnealedPolicy.
-        config['policy_eps']: Tuple to specify max/min vals for annealing policy.
         config['test_policy']: The test policy class object to use (should already be instantiated).
-        config['memory']: Memory class to use, e.g., SequentialMemory.
-        config['lr']: learning rate to use with Adam optimizer (default is 0.00001).
+        config['optimizer']: instantiated Keras-RL optimizer object
+        config['agent']: Keras-RL learning agent class
+        config['agent_params']: parameters for constructor of above agent class
     """
     
     policy = None
@@ -97,20 +97,10 @@ def get_agent(model, env, config, policy_config=None):
             test_policy.agent = agent
             test_policy.set_config(**policy_config)
     else:
-        from keras.optimizers import Adam
-        from libs.rl.agents.dqn import DQNAgent
-        from libs.rl.policy import LinearAnnealedPolicy
-        
-        memory = config['memory'](limit=env.memory_size if env.from_file else env.max_num_actions, window_length=1)
-        
-        if 'policy' in config:
-            policy_eps = config['policy_eps'] if 'policy_eps' in config else (1, 0)
-            policy = config['policy'](inner_policy=EpsGreedyPossibleQPolicy(), attr='eps', value_max=policy_eps[0], value_min=policy_eps[1], value_test=policy_eps[1], nb_steps=env.max_num_actions_to_anneal_eps if env.from_file else env.max_num_actions)
-        
-        agent = DQNAgent(model=model, nb_actions=env.action_space.n, nb_steps_warmup=env.max_num_actions/10,
-                       enable_dueling_network=True, dueling_type='max', target_model_update=env.max_num_actions/100, gamma=0.99,
-                       delta_clip=1., policy=policy, test_policy=test_policy, memory=memory)
-        agent.compile(Adam(lr=config['lr'] if 'lr' in config else 0.00001), metrics=['mae'])
+        config['agent_params']['memory'] = config['agent_params']['memory'](limit=env.memory_size if env.from_file else env.max_num_actions, window_length=1)        
+        policy = config['policy'](nb_steps=env.max_num_actions_to_anneal_eps if env.from_file else env.max_num_actions, **policy_config)
+        agent = config['agent'](model=model, nb_actions=env.action_space.n, policy=policy, test_policy=test_policy, **config['agent_params'])
+        agent.compile(config['optimizer'], metrics=['mae'])
     
     return agent
 
@@ -135,17 +125,18 @@ if __name__ == '__main__':
     num_procs = int(sys.argv[3]) if len(sys.argv) > 3 else 1
     print("Proc id:", proc_id, ", config id:", config_id)
     
-    configs[config_id][0]['num_procs'] = num_procs
-    if len(configs[config_id]) >= 3:
-        configs[config_id][2]['proc_id'] = proc_id
-        configs[config_id][2]['num_procs'] = num_procs
+    config = configs[config_id]
+    
+    config[0]['num_procs'] = num_procs
+    if len(config) >= 3 and ('learning_agent' in config[1] and not config[1]['learning_agent']):
+        configs[2]['proc_id'] = proc_id
+        configs[2]['num_procs'] = num_procs
     
     env = get_env(proc_id, config_id)
     
     if not os.path.exists(env.savedir):
         os.makedirs(env.savedir)
     
-    config = configs[config_id]
     learning = False if 'learning_agent' in config[1] and not config[1]['learning_agent'] else True
     model = get_model(env, config[1]) if learning else None
     dqn = get_agent(model, env, config[1], config[2] if len(config) >= 3 else None)

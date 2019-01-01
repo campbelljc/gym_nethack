@@ -1,4 +1,7 @@
+from keras.optimizers import Adam
+from libs.rl.agents.dqn import DQNAgent
 from libs.rl.memory import SequentialMemory
+from libs.rl.policy import LinearAnnealedPolicy
 
 from gym_nethack.nhdata import *
 from gym_nethack.policies import *
@@ -28,6 +31,7 @@ dragons = ('dragons', [mon for mon, diff in MONSTERS if 'dragon' in mon and 'bab
 
 combat_thesis_configs = [
     ({ # 0
+        # env. parameters
         'env_name':          'NetHackCombat-v0',
         'name':              'thesis_dqn',
         'num_actions':       40000,
@@ -41,13 +45,28 @@ combat_thesis_configs = [
         'item_sampling':     'all',
         'clvl_to_mlvl_diff': -3,
         'dlvl':              10
-    }, {
+    }, { # model parameters
+        'agent':             DQNAgent,
+        'agent_params': {
+            'nb_steps_warmup':          4000, # 10%
+            'enable_dueling_network':   True,
+            'dueling_type':             'max',
+            'gamma':                    0.99,
+            'delta_clip':               1.,
+            'memory':                   SequentialMemory,
+            'target_model_update':      400
+        },
+        'optimizer':         Adam(0.0001),
         'policy':            LinearAnnealedPolicy,
         'test_policy':       EpsGreedyPossibleQPolicy(eps=0),
-        'memory':            SequentialMemory,
-        'lr':                0.0001,
         'units_d1':          32,
         'units_d2':          16
+    }, { # policy parameters
+        'inner_policy':      EpsGreedyPossibleQPolicy(),
+        'attr':              'eps',
+        'value_max':         1,
+        'value_min':         0,
+        'value_test':        0
     }),
     ({ # 1
         'env_name':          'NetHackCombat-v0',
@@ -96,12 +115,27 @@ combat_thesis_configs = [
         'fixed_ac':          0,
         'dlvl':              25
     }, {
+        'agent':             DQNAgent,
+        'agent_params': {
+            'nb_steps_warmup':          4000, # 10%
+            'enable_dueling_network':   True,
+            'dueling_type':             'max',
+            'gamma':                    0.99,
+            'delta_clip':               1.,
+            'memory':                   SequentialMemory,
+            'target_model_update':      400,
+        },
+        'optimizer':         Adam(0.000001),
         'policy':            LinearAnnealedPolicy,
         'test_policy':       EpsGreedyPossibleQPolicy(eps=0),
-        'memory':            SequentialMemory,
-        'lr':                0.000001,
         'units_d1':          64,
         'units_d2':          32
+    }, { # policy parameters
+        'inner_policy':      EpsGreedyPossibleQPolicy(),
+        'attr':              'eps',
+        'value_max':         1,
+        'value_min':         0,
+        'value_test':        0
     }),
     ({ # 4
         'env_name':          'NetHackCombat-v0',
@@ -128,12 +162,27 @@ combat_thesis_configs = [
         'clvl_to_mlvl_diff': 3,
         'fixed_ac':          -15
     }, {
+        'agent':             DQNAgent,
+        'agent_params': {
+            'nb_steps_warmup':          4000, # 10%
+            'enable_dueling_network':   True,
+            'dueling_type':             'max',
+            'gamma':                    0.99,
+            'delta_clip':               1.,
+            'memory':                   SequentialMemory,
+            'target_model_update':      400
+        },
+        'optimizer':         Adam(0.000001),
         'policy':            LinearAnnealedPolicy,
         'test_policy':       EpsGreedyPossibleQPolicy(eps=0),
-        'memory':            SequentialMemory,
-        'lr':                0.000001,
         'units_d1':          64,
         'units_d2':          32
+    }, { # policy parameters
+        'inner_policy':      EpsGreedyPossibleQPolicy(),
+        'attr':              'eps',
+        'value_max':         1,
+        'value_min':         0,
+        'value_test':        0
     }),
 ]
 
@@ -254,6 +303,6 @@ level_configs = [
     })
 ]
 
-#configs = combat_thesis_configs
-configs = exploration_configs
+configs = combat_thesis_configs
+#configs = exploration_configs
 #configs = level_configs

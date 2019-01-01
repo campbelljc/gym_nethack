@@ -146,7 +146,7 @@ class NetHackCombatEnv(NetHackRLEnv):
             'df' + str(self.clvl_to_mlvl_diff)
         ]
     
-    def set_config(self, proc_id, num_actions=-1, num_episodes=-1, clvl_to_mlvl_diff=-3, monsters='none', initial_equipment=[], items=None, item_sampling='uniform', num_start_items=5, action_list='all', fixed_ac=999, dlvl=None, tabular=False, test_policy=None, lr=0, units_d1=0, units_d2=0, skip_training=False, load_combats=False, **args):
+    def set_config(self, proc_id, num_actions=-1, num_episodes=-1, clvl_to_mlvl_diff=-3, monsters='none', initial_equipment=[], items=None, item_sampling='uniform', num_start_items=5, action_list='all', fixed_ac=999, dlvl=None, tabular=False, test_policy=None, units_d1=0, units_d2=0, skip_training=False, load_combats=False, **args):
         """Set config.
         
         Args:
@@ -164,7 +164,6 @@ class NetHackCombatEnv(NetHackRLEnv):
             dlvl: dungeon level for the episode. affects monster attributes (thus difficulty).
             tabular: whether we are using a tabular representation for the Q-values (deprecated)
             test_policy: used for record folder name (also used in ngym.py)
-            lr: used for record folder name (also used in ngym.py)
             units_d1: used for record folder name (also used in ngym.py)
             units_d2: used for record folder name (also used in ngym.py)
             skip_training: if True, will not add above info to folder name
