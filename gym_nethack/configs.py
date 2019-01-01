@@ -117,13 +117,13 @@ combat_thesis_configs = [
     }, {
         'agent':             DQNAgent,
         'agent_params': {
-            'nb_steps_warmup':          4000, # 10%
+            'nb_steps_warmup':          30000, # 10%
             'enable_dueling_network':   True,
             'dueling_type':             'max',
             'gamma':                    0.99,
             'delta_clip':               1.,
             'memory':                   SequentialMemory,
-            'target_model_update':      400,
+            'target_model_update':      3000,
         },
         'optimizer':         Adam(0.000001),
         'policy':            LinearAnnealedPolicy,
@@ -164,13 +164,13 @@ combat_thesis_configs = [
     }, {
         'agent':             DQNAgent,
         'agent_params': {
-            'nb_steps_warmup':          4000, # 10%
+            'nb_steps_warmup':          200000, # 10%
             'enable_dueling_network':   True,
             'dueling_type':             'max',
             'gamma':                    0.99,
             'delta_clip':               1.,
             'memory':                   SequentialMemory,
-            'target_model_update':      400
+            'target_model_update':      20000
         },
         'optimizer':         Adam(0.000001),
         'policy':            LinearAnnealedPolicy,

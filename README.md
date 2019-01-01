@@ -114,7 +114,7 @@ This information is mostly in the documentation but I have reproduced it here wi
 
 ## Code documentation
 
-All environment and policy methods are commented with docstrings. You can view the documentation [here](http://www.campbelljc.com/research/nethackrl/docs), with the page on environment and policy methods located [here](http://www.campbelljc.com/research/nethackrl/docs/gym_nethack.html).
+All environment and policy methods are commented with docstrings. You can view the documentation [here](http://campbelljc.com/research/gym_nethack/docs/index.html), with the page on environment and policy methods located [here](http://campbelljc.com/research/gym_nethack/docs/gym_nethack.html#subpackages).
 
 The framework is also mentioned in small part in my thesis, which you can access [here](http://campbelljc.com/research/thesis/).
 
