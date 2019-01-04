@@ -13,16 +13,17 @@ Note: This is not a typical OpenAI Gym environment. It is more like an OpenAI gy
 ## Installation
 
 1. Download this repository.
-2. Install Python (v3+) and the following Python libraries: pyzmq, dill, gym, keras, numpy.
+2. Install Python (v3+) and the following Python libraries: pyzmq, dill, gym, keras, numpy, networkx, matplotlib, tensorflow.
 3. Download this [modified version of keras-rl](https://github.com/campbelljc/keras-rl). Place the rl folder into the libs directory of this repo. Do a find-and-replace in the rl folder of "from rl" and change to "from libs.rl".
 4. Download and build the [zmq library](http://zeromq.org/intro:get-the-software).
 5. Download this [modified version of NetHack](https://github.com/campbelljc/NetHack). Follow the instructions for building NetHack from source, but first make the following modifications:
   * In nethack/include/config.h, edit line 320 to specify the path to the nethack/game directory. E.g., "/Users/jcampbell/Downloads/nethack/game".
   * (Mac/Linux): After the Makefile in the main NetHack directory is created during the regular NetHack build instructions, open it and make the following changes before continuing to build NetHack:
     * Change PREFIX from "/usr" to the path to your NetHack directory, e.g., "/Users/jcampbell/Downloads/nethack".
-    * Change the GAMEUID to your current username, and GAMEGRP to staff.
+    * Change the GAMEUID to your current username, and GAMEGRP to staff (or on Linux, your current username).
     * Change HACKDIR to the full path to the "nethack/game" directory, and INSTDIR to the full path to the "nethack/install" directory.
-	* Search for the line "sed -e 's;/usr/games/lib/nethackdir;$(HACKDIR);'" and replace /usr/games/lib/nethackdir with the full path to the "nethack/game" directory.	
+	* Search for the line "sed -e 's;/usr/games/lib/nethackdir;$(HACKDIR);'" and replace /usr/games/lib/nethackdir with the full path to the "nethack/game" directory.
+  * (Linux): You may have to alter the WINTTYLIB to "-lncurses" in src/Makefile and ./Makefile. Also, you may have to rename sys/unix/nethack\_linux.sh to sys/unix/nethack.sh and update the HACKDIR path at the top of the file to the one you used in the step above.
   * (Windows): After the Makefile in the main NetHack directory is created during the regular NetHack build instructions, open the file "src/Makefile.gcc" and make the following changes before continuing to build NetHack:
     * Look for the "$(GAMEDIR)/NetHack.exe" rule. At the end of the $(link) command, add the full path to the zmq\bin\libzmq.dll file built in the step 4.
 	* Look for the "$(O)allmain.o" rule and add the full path to the zmq\include\zmq.h file.
@@ -128,7 +129,7 @@ The framework is also mentioned in small part in my thesis, which you can access
 
 - [ ] Check if records are being saved properly in level environment.
 
-- [ ] Update keras-rl branch to current version.
+- [ ] Update keras-rl fork to current version.
 
 - [ ] Add policy name to save directory name.
 

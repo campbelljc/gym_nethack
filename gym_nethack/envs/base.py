@@ -348,7 +348,7 @@ class NetHackEnv(gym.Env, utils.EzPickle):
         self.context = zmq.Context()
 
         self.records = {}
-        self.fname_infos = []
+        #self.fname_infos = []
         self.total_num_games = 0
                 
         self.single = nhinfo is None # if only this environment will be running, i.e., not Level.

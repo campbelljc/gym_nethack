@@ -247,12 +247,12 @@ class NetHackCombatEnv(NetHackRLEnv):
     
             self.num_start_items = num_start_items
         
-        if not skip_training:
-            self.fname_infos += [
-                'lr' + str(lr),
-                'u' + str(units_d1) + '-' + str(units_d2),
-                str(num_actions)
-            ]
+        #if not skip_training:
+        #    self.fname_infos += [
+        #        'lr' + str(lr),
+        #        'u' + str(units_d1) + '-' + str(units_d2),
+        #        str(num_actions)
+        #    ]
         
         super().set_config(proc_id, action_size=len(self.abilities), state_size=self.input_size, parse_items=True, max_num_actions=num_actions, max_num_episodes=num_episodes, max_num_actions_per_episode=200, **args)
     
